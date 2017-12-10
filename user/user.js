@@ -24,10 +24,11 @@ userSchema.statics.findUsernameByUserID = function(userid,callback) {
       })
     }
 
-//find friends in user by userID
+//find friends in User by userID
 userSchema.statics.findFriendsByUserID = function(userid,callback) {
     User.findOne({_id: userid})
     .select('friends')
+    .sort('name')
     .populate('friends', 'name')
     .exec(function(err, docs) {
         if (err) {

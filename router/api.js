@@ -27,11 +27,11 @@ apiRoutes.get('/content', checkAccess, function(req,res,next) {
 });
 
 
-apiRoutes.get('/friends', checkAccess, function(req,res,next) {
+apiRoutes.get('/getFriends', checkAccess, function(req,res,next) {
   var json = [];
-  User.findFriendsByUserID(req.session.userId, (error, docs)=> {
-    async.forEach(docs.friends, (item,callback) => {
-      json.push(item.name);
+  User.findFriendsByUserID(req.session.userId, (error, friends)=> {
+    async.forEach(friends.friends, (friend,callback) => {
+      json.push({'friendId':friend._id,'Name':friend.name});
     })
     res.json(json);
   })
@@ -50,10 +50,14 @@ apiRoutes.get('/getMessagesByURI',checkAccess,function(req,res,next) {
 })
 
 // API to add a new user group
-// takes userId and group name
+// takes userId, group name and group description
 apiRoutes.post('/addGroup', checkAccess, function (req,res,next) {
   if (req.body.newGroupName) {
-  var newGroup = {userId:req.session.userId, name:req.body.newGroupName}
+  const newGroup = {
+    groupCreatedBy:req.session.userId,
+    groupName:req.body.newGroupName,
+    groupDescription:req.body.newGroupDescription
+  }
   Groups.findGroupByName(newGroup, (error,group) => {
     if (group === null) {
     Groups.create(newGroup, (error,groupAdded) =>{
@@ -88,7 +92,7 @@ apiRoutes.post('/addGroup', checkAccess, function (req,res,next) {
 // takes userId and group name
 apiRoutes.delete('/deleteGroup', checkAccess,function (req,res,next){
   if (req.body.groupName) {
-    var query = {userId:req.session.userId, name:req.body.groupName}
+    const query = {groupCreatedBy:req.session.userId, groupName:req.body.groupName}
     Groups.findGroupByName(query, (error,group) => {
       if (group === null || error) {
         res.json({
@@ -114,13 +118,50 @@ apiRoutes.delete('/deleteGroup', checkAccess,function (req,res,next){
 // takes userId
 // returns an object {'groupId','Name'}
 apiRoutes.get('/getUserGroups', checkAccess,function(req,res,next) {
-  var json = [];
+  const json = [];
   Groups.findAllGroupsByUserID(req.session.userId, (error, docs)=> {
     async.forEach(docs, (element,callback) => {
-        json.push({'groupId': element._id,'Name':element.name,'createdOn':element.createdOn})
+        json.push({
+          'groupId': element._id,
+          'createdBy': element.groupCreatedBy,
+          'Name':element.groupName,
+          'Data':element.groupCreatedOn,
+          'Description':element.groupDescription})
     })
     res.json(json);
   })
+})
+// API to get members of a group
+// takes userId and name of the group
+// returns an array of objects [{memberId,memberName}]
+apiRoutes.get('/getGroupMembers', checkAccess, function(req,res,next) {
+  if (req.query.groupName) {
+    var json = [];
+    var query = {userId:req.session.userId,groupName:req.query.groupName};
+    Groups.findAllMembersInGroup(query, (error,group)=>{
+      if (error) {
+        res.json({
+          success:false,
+          message:'Cannot get group members.'
+        })
+        next(error);
+      } else if (group === null) {
+        res.json({
+          success:false,
+          message:'Group has no members.'
+        })
+        next();
+      } else {
+        async.forEach(group.groupMembers, (member,callback) => {
+          json.push({
+            'memberId':member.id,
+            'memberName':member.name
+          })
+        })
+        res.json(json);
+      }
+    })
+  }
 })
 
 //post message
