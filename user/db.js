@@ -1,7 +1,6 @@
 var mongoose = require("mongoose");
 
-mongoose.connect('mongodb://user1:test@ds163667.mlab.com:63667/tag', {useMongoClient: true});
-//mongoose.connect(process.env.MONGODB, {useMongoClient: true});
+mongoose.connect(process.env.MONGODB, {useMongoClient: true});
 mongoose.Promise = global.Promise;
 var db = mongoose.connection;
 

@@ -7,7 +7,8 @@ var userSchema = new Schema({
     //_id:   {type: Schema.Types.ObjectId},
     email: { type: String},
     password: { type: String},
-    name: { type: String},
+    name: { type: String, unique: true},
+    groups:[{type: String}],
     friends: { type: Array },
     createdOn: { type: Date, 'default': Date.now }
   });
@@ -37,7 +38,21 @@ userSchema.statics.findFriendsByUserID = function(userid,callback) {
         callback(null,docs);
 });
 }
-    
+
+//find friends in User by userID
+userSchema.statics.isFriend = function(query,callback) {
+    User.findOne({_id: query.userId, friends:query.item})
+    .select('friends')
+    .populate('friends', 'name')
+    .exec(function(err, docs) {
+        if (err) {
+          callback(err,null);
+        }
+        callback(null,docs);
+});
+}
+
+
 //check new user
 userSchema.statics.checkUserExists = function(req,res,callback) {
     User.findOne({email:req.body.signemail}||{username:req.body.signusername})
@@ -54,6 +69,19 @@ userSchema.statics.checkUserExists = function(req,res,callback) {
             callback(error);
     }
 })
+}
+
+userSchema.statics.isMemberOfGroup = function(query,callback) {
+    User.findOne({_id:query.userId,groups:query.item})
+    .exec(function(error,docs){
+      if (error) {
+        callback(err,null);
+      } else {
+        callback(null,docs);
+      }
+
+    })
+
 }
 
 //check input and DB 

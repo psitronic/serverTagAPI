@@ -4,15 +4,15 @@ var Schema = mongoose.Schema;
 // group schema
 var groupSchema = new Schema({
     groupCreatedBy:{type: Schema.Types.ObjectId, ref: 'User'},
-    groupName: { type: String},
+    groupName: { type: String, unique : true},
     groupDescription: {type: String},
     groupMembers: [{ type: Schema.Types.ObjectId , ref: 'User'}],
     groupCreatedOn: { type: Date, 'default': Date.now }
   });
 
-groupSchema.statics.findGroupByName = function(query,callback){
-    Groups.findOne({groupCreatedBy:query.groupCreatedBy,groupName:query.groupName})
-    .select('groupName')
+groupSchema.statics.findGroupByName = function(groupName,callback){
+    Groups.findOne({groupName:groupName})
+    .select('_id groupName')
     .exec(function(err,docs){
         if (err) {
             callback(err,null);
@@ -21,9 +21,21 @@ groupSchema.statics.findGroupByName = function(query,callback){
     })
 }
 
+groupSchema.statics.findGroupByGroupID = function(groupID,callback){
+    Groups.findOne({_id:groupID})
+    .select('_id groupName groupDescription groupCreatedBy groupCreatedOn')
+    .exec(function(err,docs){
+        if (err) {
+            callback(err,null);
+        } else
+        callback(null,docs);
+    })
+}
+
+
 groupSchema.statics.findAllGroupsByUserID = function(groupCreatedBy,callback) {
     Groups.find({groupCreatedBy:groupCreatedBy})
-    .select('groupCreatedBy groupName groupDescription groupCreatedOn')
+    .select('_id groupCreatedBy groupName groupDescription groupCreatedOn')
     .sort('groupName')
     .populate('groupCreatedBy', 'name')
     .exec(function(err, docs) {

@@ -1,3 +1,4 @@
+
 var express = require('express');
 var mongo = require('mongodb').MongoClient;
 var apiRoutes = express.Router();
@@ -6,6 +7,7 @@ var async = require('async');
 var User = require('../user/user');
 var Messages =  require('../user/messages');
 var Groups =  require('../user/groups');
+var Friends =  require('../user/friends');
 
 var  checkAccess=function(req,  res,  next)  {
   if  (req.session.userId)  {
@@ -15,6 +17,67 @@ var  checkAccess=function(req,  res,  next)  {
     next(err);
   }
 } 
+
+var  checkAccessToGroup = function(req,  res,  next)  {
+  if (req.query.kind === "Public") {
+    req.query.item = req.session.userId;
+    next();
+  }
+  if (req.query.kind === "User") {
+    if (req.query.item === req.session.userId) {
+      next();
+    } else {
+    User.findUsernameByUserID(req.query.item, (error,docs) => {
+      if (error) {
+        next(error);
+      } else if (docs === null) {
+        return res.json({ success: false, message: 'User does not exist.' });
+        next(err);  
+      } else {
+        const query = {
+          userId:req.session.userId,
+          item:req.query.item
+        }
+        User.isFriend(query, (error,docs) => {
+         if (error) {
+           next(error);
+         } else if(docs === null) {
+          return res.json({ success: false, message: 'Not friends.' });
+          next(err);                
+         } else {
+           next();
+         }
+        })
+      }
+    })
+  }
+  } else if (req.query.kind === "Groups") {
+  Groups.findGroupByGroupID(req.query.item, (error,docs) => {
+    if (error) {
+      next(err);
+    } else if (docs === null) {
+      return res.json({ success: false, message: 'Group does not exist.' });
+      next(err); 
+    } else {
+      const query = {
+        userId:req.session.userId,
+        item:req.query.item
+      }
+      User.isMemberOfGroup(query, (error,docs) => {
+        if (error) {
+          next(error);
+        } else if (docs === null) {
+          return res.json({ success: false, message: 'Not a group member.' });
+          next(err); 
+        } else {
+          next(); 
+        }
+      })
+    }
+  })
+}
+}
+
 
 apiRoutes.get('/content', checkAccess, function(req,res,next) {
   var json = [];
@@ -41,26 +104,78 @@ apiRoutes.get('/getMessagesByURI',checkAccess,function(req,res,next) {
   var json = [];
   var userIdURI= {userid:req.session.userId,
   url:req.headers['website']}
-  Messages.findMessagesByUserIdURI(userIdURI, (error, docs) => {
+   Messages.findMessagesByUserIdURI(userIdURI, (error, docs) => {
     async.forEach(docs, (element,callback) => {
-      json.push({'Name':element.createdBy.name,'Message':element.text,'Date':element.createdOn})
+      json.push({'Name':element.createdBy.name,'Created for':element.createdFor,'Message':element.text,'Date':element.createdOn})
   })
     res.json(json);
-  })
+  }) 
 })
+
+
+apiRoutes.get('/getMessages',[checkAccess,checkAccessToGroup],function(req,res,next) {
+  const json = [];
+      const query = {
+        'url':req.query.website,
+        'createdFor.kind':req.query.kind,
+        'createdFor.item':req.query.item
+      }
+       Messages.findMessagesForGroup(query, (error, docs) => {
+         if (error) {
+           next(error);
+         } else if (docs.length === 0) {
+          res.json({success:false, message:'No messages.'})
+         } else {
+        async.forEach(docs, (element,callback) => {
+          json.push({'Name':element.createdBy.name,'Message':element.text,'Date':element.createdOn})
+      })
+        res.json(json);
+    }
+      })     
+    })
+
+//post messages
+apiRoutes.post('/postMessages', [checkAccess,checkAccessToGroup],function (req,res,next){
+  if (req.body.webtag) {
+    var parsedTag = JSON.parse(req.body.webtag);
+    var newTag = {
+      text: parsedTag.messageText,
+      createdFor:[{kind:req.query.kind,
+                  item:req.query.item}],
+      url: req.query.website,
+      createdBy: req.session.userId
+    }
+    console.log(newTag);
+    Messages.create(newTag, (error,messageCreated) => {
+      if (!error) {
+        res.json({
+          success: true,
+          message: 'Webtag posted'
+        })    
+      } else {
+        console.log(error);
+        res.json({
+          success: false,
+          message: 'Could not post a message.'
+        })    
+      }
+    })
+}
+})
+
 
 // API to add a new user group
 // takes userId, group name and group description
 apiRoutes.post('/addGroup', checkAccess, function (req,res,next) {
   if (req.body.newGroupName) {
-  const newGroup = {
-    groupCreatedBy:req.session.userId,
-    groupName:req.body.newGroupName,
-    groupDescription:req.body.newGroupDescription
-  }
-  Groups.findGroupByName(newGroup, (error,group) => {
+  Groups.findGroupByName(req.body.newGroupName, (error,group) => {
     if (group === null) {
-    Groups.create(newGroup, (error,groupAdded) =>{
+      const newGroup = {
+        groupCreatedBy:req.session.userId,
+        groupName:req.body.newGroupName,
+        groupDescription:req.body.newGroupDescription
+      }    
+      Groups.create(newGroup, (error,groupAdded) =>{
       if (!error) {
         res.json({
           success: true,
@@ -92,7 +207,7 @@ apiRoutes.post('/addGroup', checkAccess, function (req,res,next) {
 // takes userId and group name
 apiRoutes.delete('/deleteGroup', checkAccess,function (req,res,next){
   if (req.body.groupName) {
-    const query = {groupCreatedBy:req.session.userId, groupName:req.body.groupName}
+    const query = {groupName:req.body.groupName}
     Groups.findGroupByName(query, (error,group) => {
       if (group === null || error) {
         res.json({
